@@ -1,0 +1,266 @@
+{-- 
+    This is a subset of
+    'https://www.w3.org/TR/REC-xml/#sec-notation the EBNF variant used by W3C'.
+
+    > Grammar ::= Production* 
+    > Production  ::= Name '::=' ( Choice | Link )  
+    > Name  ::= [\w+] 
+    > Choice  ::= SequenceOrDifference ( '|' SequenceOrDifference )*  
+    > SequenceOrDifference    ::= Item*    
+    > Item    ::= Primary ( '?' | '*' | '+' )?    
+    > Primary ::= Name | StringLiteral | CharClass | '(' Choice ')'  
+    > StringLiteral   ::= '"' [^"]* '"' | "'" [^']* "'"   /* ws: explicit */
+    > CharClass   ::= '[' '^'? ( Char | CharRange)+ ']'   /* ws: explicit */
+    > Char    ::= [http://www.w3.org/TR/xml#NT-Char]  
+    > CharRange   ::= Char '-' [^]] /* ws: explicit */
+    > Whitespace  ::= S | Comment 
+    > S   ::= '\t' | '\n' | '\r' | ' '  
+    > Comment ::= '/*' ( [^*] | '*'+ [^*/] )* '*'* '*/'   /* ws: explicit */
+-}
+module de.contexo.data.EBNF where
+
+-- import Data.List
+import Data.MicroParsec as P()
+import Data.HashMap as Map()
+import Data.Iterators(StringIterator SI)
+
+
+--- Data type for extended Backus-Naur Form (EBNF) rules.
+--- The problem with EBNF is that nonsensical expressions can be built, like
+---     > (foo? | bar?)+
+--- In the same way, illegal (or, at least, undesirable) EBNF expressions can be build.
+--- The function 'normalize' can be used to flat-out unnesseray nested expressions like:
+--- > (a | (b|c) | d)   ==> (a|b|c|d)
+--- > (a (b c) d)       ==> (a b c d)
+--- > (a||b)            ==> (a | b)?
+  
+data EBNF = Alt {elems :: [EBNF] }      --- alternatives, normally not empty
+          | Seq {elems :: [EBNF] }      --- sequence, may be empty
+          | Qnt { quantor :: Quantor, elem :: EBNF }   --- ebnf quantified with "?", "+" or "*"
+          | NonT {name :: String }      --- non terminal
+          | Term {name :: String }      --- non terminal
+          where
+    --- precedence of the construct
+    prec Alt{} = 0
+    prec Seq{} = 1
+    prec Qnt{} = 2
+    prec _     = 3
+    --- the empty EBNF
+    isEmpty (Seq []) = true
+    isEmpty _        = false
+    --- sepearator between elements for show and pretty printing
+    sep Alt{} = "|"
+    sep _     = " " 
+    showp p e 
+        | e.{elems?}  → inparens (joined e.sep (map (showp e.prec) e.elems))
+        | e.{elem?}   → inparens (showp e.prec e.elem ++ mark e.quantor)
+        | otherwise   → e.name         
+        where 
+            mark Many = "*"
+            mark Some = "+"
+            mark _    = "?"
+            parens = prec e < p
+            inparens s = if parens then "(" ++ s ++ ")" else s
+ 
+instance Show EBNF where show = EBNF.showp 0
+derive Eq EBNF
+
+--- An EBNF definition
+data EDef = Def { !name :: String, !ebnf :: EBNF }
+derive Eq EDef
+instance Show EDef where
+    show def = def.name ++ " ::= " ++ show def.ebnf
+
+--- remove unnessecary complexity from EBNF, and give errors for multiple quantifications
+--- Invariants guaranteed after completion:
+--- 1. An 'Alt' contains no empty 'Seq'
+--- 2. Elements of 'Alt' are not 'Alt' themselves.
+--- 3. An empty 'Seq' is not quantified.
+--- 4. Elements of 'Seq' are not 'Seq's themselves.
+normalize Alt{elems} = case flatAlt elems of
+        es' | any (_.isEmpty) es' = Qnt Optional . normalize . Alt . filter (not . _.isEmpty) $ es'
+        [] = Seq [] -- canonical empty
+        [x] = x
+        xs = Alt xs
+    where
+        flatAlt [] = []
+        flatAlt (x:xs) = case normalize x of
+            Alt{elems} → flatAlt (elems ++ xs)
+            y          → y : flatAlt xs
+normalize Seq{elems} = case flatSeq elems of
+        [x] → x
+        xs  → Seq xs
+    where
+        flatSeq [] = []
+        flatSeq (x:xs) = case normalize x of
+            Seq{elems}  → flatSeq (elems ++ xs)
+            y           → y : flatSeq xs
+
+normalize Qnt{quantor, elem} = case normalize elem of
+        e@Qnt{} → error ("Illegal EBNF: "  ++ show Qnt{quantor, elem}
+                    ++ "\nnormalizes to: " ++ show Qnt{quantor, elem=e})
+        e@Seq [] → error ("Illegal EBNF: " ++ show Qnt{quantor, elem}
+                    ++ "\nnormalizes to: " ++ show Qnt{quantor, elem=e})
+        e   → Qnt{quantor, elem=e}
+
+normalize e = e
+
+--- compute a list of items that are referenced by an EBNF expression
+--- (duplicates are not removed)
+references :: EBNF -> [String]
+references = go [] 
+    where
+        go acc  Alt{elems}  = fold go acc elems
+        go acc  Seq{elems}  = fold go acc elems
+        go acc  Qnt{elem}   = go acc elem
+        go acc  NonT{name}  = name : acc
+        go acc  Term{name}  = acc
+
+--- Tell if a production is recursive
+isRecursive ∷ EDef → Bool
+isRecursive Def{name, ebnf} = name `elem` references ebnf
+
+--- Tell the first 'Qnt', 'Tern' or 'NonT' and the remaining part
+--- Apply only to normalized expressions that are not @Seq []@
+prefix a = case a of
+    Seq xs = (head xs, tail xs)
+    e      = (e, [])
+
+suffix e = case e of
+    Seq xs = (init xs, last xs)
+    _      = ([], e)
+    
+
+--- An EBNF Item can be quantified with ?, * or +
+data Quantor = Many | Some | Optional
+deriving Eq     Quantor
+deriving Show   Quantor
+          
+
+--- a map of EBNF productions
+type EMap = Map.HashMap String EDef
+
+-- ---------------------------------------------------------------------------
+--      Parsers
+-- ---------------------------------------------------------------------------
+
+--- Parse 'Alt'
+pAlt ∷ P.Parser Iterators.StringIterator Char EBNF
+pAlt = do
+    P.skip (P.space <|> pComment)
+    normalize . Alt <$> P.sepBy1 pSeq pBar
+
+--- Parse 'Seq'
+pSeq ∷ P.Parser Iterators.StringIterator Char EBNF
+pSeq = do
+    P.skip (P.space <|> pComment)
+    Seq <$> P.many pQnt
+
+--- Parse 'Qnt'
+pQnt ∷ P.Parser Iterators.StringIterator Char EBNF
+pQnt = do
+    P.spaces
+    e ← pTerm
+    q ← P.optional pQuantor
+    pure (maybe id Qnt q e)
+
+--- Parse a 'Term', 'NonT' or 'Alt' in parentheses    
+pTerm ∷ P.Parser Iterators.StringIterator Char EBNF
+pTerm = Term <$> pName
+    <|> NonT <$> (pChar <|> pStr <|> pClass)
+    <|> P.symbol (P.between pLeft pRight pAlt)
+
+--- Parse "::=", ":" or "="
+pEquals = P.symbol $ 
+    (P.expect ':' >> P.expect ':' >> P.expect '=')
+    <|> P.expect ':'
+    <|> P.expect '='
+
+--- Parse 'Edef'  
+pDef ∷ P.Parser Iterators.StringIterator Char EDef
+pDef = do
+    P.skip (P.space <|> pComment)
+    p ← pName
+    pEquals
+    alt ← pAlt
+    P.symbol (const () <$> P.expect ';' <|> P.eos)
+    pure (Def p alt)
+              
+
+pQuantor ∷ P.Parser SI Char Quantor
+pQuantor = P.symbol (
+            const Optional <$> P.expect '?' 
+        <|> const Many     <$> P.expect '*' 
+        <|> const Some     <$> P.expect '+')
+            
+--- parse (
+pLeft ∷ P.Parser SI Char Char
+pLeft = P.symbol (P.expect '(')
+
+--- parse )
+pRight ∷ P.Parser SI Char Char
+pRight = P.symbol (P.expect ')')
+
+--- Parse a vertical bar
+pBar = P.symbol (P.expect '|')
+
+--- An identifier
+pName ∷ P.Parser SI Char String
+pName = P.symbol $ _.match <$> P.match '^\w+'
+
+--- A sequence of characters enclosed in apostrophes (doesn't handle escape sequences)
+--- Also, assumes there is at least one character between the apostrophes
+pChar ∷ P.Parser SI Char String
+pChar = P.symbol $ do
+    P.expect '\''
+    inner ← packed <$> P.manyWhile (!= '\'')
+    P.expect '\''
+    pure ("'" ++ inner ++ "'") 
+
+--- A sequence of characters enclosed in quotes (doesn't handle escape sequences)
+pStr ∷ P.Parser SI Char String
+pStr = P.symbol do
+    P.expect '"'
+    inner ← packed <$> P.manyWhile (!= '"')
+    P.expect '"'
+    pure ("\"" ++ inner ++ "\"") 
+
+--- Parses an EBNF character class
+pClass ∷ P.Parser SI Char String
+pClass = P.symbol $ do
+            P.expect '['
+            inner ← packed <$> P.manyWhile (!=']')
+            P.expect ']'
+            pure ("[" ++ inner ++ "]")
+
+--- Parse a C-comment
+pComment = do
+        P.expect '/'
+        P.expect '*'
+        P.match  '^(?s).*?\*/'
+        P.spaces
+        pure ' '
+
+--- Parse a list of EBNF prods
+pEBNF = do
+    prods ← P.some pDef
+    P.eos
+    pure prods
+
+--- Parse a String containing an EBNF grammar
+--- Either terminate productions with ";" or let productions start at the beginning of a new line.
+parseGrammar ∷ String → (String | [EDef])
+parseGrammar = fst . pEBNF.run . SI.from . canon where
+    -- make sure the rules are separated by ";"
+    canon s = joined "\n" . go . '\r?\n'.splitted $ s
+            where 
+                go [] = []
+                go (x:y:xs) 
+                    | y ~ '^[-\w\d]+\s*(:|=|::=)' = terminate x : go (y:xs)
+                    | otherwise                   = x : go (y:xs)
+                go [x] = [terminate x]
+    terminate s
+        | s ~ ';\s*$' = s
+        | otherwise   = s ++ ";"
+
+
