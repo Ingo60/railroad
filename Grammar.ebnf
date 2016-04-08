@@ -108,7 +108,7 @@ fldid ::= (PUBLIC|PRIVATE)? strictfldid
 jitem ::= rawnativename|SOMEOP|'!'|'?'
 wheretokens ::= 'where' '{' jtokens? '}'
 jtokens ::= (jtoken|'{' jtokens? '}') jtokens?
-jtoken ::= VARID|CONID|QVARID|QCONID|CONID '.'|DOCUMENTATION|'module'|'import'|INFIX|INFIXR|INFIXL|'native'|'data'|'where'|CLASS|INSTANCE|ABSTRACT|'type'|TRUE|FALSE|'if'|'then'|'else'|'case'|OF|DERIVE|LET|IN|DO|FORALL|PRIVATE|PROTECTED|PUBLIC|'pure'|THROWS|'mutable'|INTCONST|STRCONST|LONGCONST|FLTCONST|DBLCONST|CHRCONST|'->'|'::'|'<-'|'=>'|'..'|SOMEOP|INTERPRET|','|'|'|'['|']'|'('|')'|'.'|'?'|'-'|';'|'!'|'='|'\'
+jtoken ::= VARID|CONID '.'?|QVARID|QCONID|DOCUMENTATION|'module'|'import'|INFIX|INFIXR|INFIXL|'native'|'data'|'where'|CLASS|INSTANCE|ABSTRACT|'type'|TRUE|FALSE|'if'|'then'|'else'|'case'|OF|DERIVE|LET|IN|DO|FORALL|PRIVATE|PROTECTED|PUBLIC|'pure'|THROWS|'mutable'|INTCONST|STRCONST|LONGCONST|FLTCONST|DBLCONST|CHRCONST|'->'|'::'|'<-'|'=>'|'..'|SOMEOP|INTERPRET|','|'|'|'['|']'|'('|')'|'.'|'?'|'-'|';'|'!'|'='|'\'
 scontexts ::= qconid tyvar (',' scontexts?)?
 scontext ::= qconid tyvar
 tyvar ::= VARID|'(' VARID '::' kind ')'
@@ -117,7 +117,7 @@ kind ::= simplekind ('->' kind)?
 literal ::= TRUE|FALSE|CHRCONST|STRCONST|INTCONST|BIGCONST|LONGCONST|FLTCONST|DBLCONST|REGEXP
 mbdot ::= '.'|SOMEOP
 modulename ::= modulename1
-modulename1 ::= CONID|(varidkw '.'|CONID '.') modulename1
+modulename1 ::= CONID|(varidkw|CONID) '.' modulename1
 nativename ::= rawnativename
 nativepur ::= ('pure'|'mutable')? 'native'
 operators ::= (SOMEOP|VARID|'-') operators?
@@ -130,7 +130,7 @@ plainfldid ::= VARID
 qconid ::= (CONID '.' (CONID '.')?)? CONID
 qualifiers ::= CONID '.' (CONID '.')?
 qvarid ::= CONID '.' (CONID '.')? (VARID|'!'|'?')|VARID
-rawnativename ::= (VARID|'module') ('.' rawnativename)?|CONID|CONID '.' rawnativename|STRCONST
+rawnativename ::= (VARID|'module'|CONID) ('.' rawnativename)?|STRCONST
 semicoli ::= ';' semicoli?
 thenx ::= ';'? 'then'
 varop ::= VARID|'!'|'?'

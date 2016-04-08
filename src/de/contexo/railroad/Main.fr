@@ -132,58 +132,73 @@ convItem (Terminal s)        = Term s
 convItem (NonTerminal s)     = NonT s
 
 --- Perform all optimizations on a production
-optimize ∷ EMap → EDef → EDef
-optimize emap eprod = eprod.{ebnf ← inline emap . factorRight . factorLeft}
+optimize ∷ EDef → EDef
+optimize eprod = eprod.{ebnf ← repeatUntil (==) factorRight 
+                             . repeatUntil (==) factorLeft}
 
+
+repeatUntil ∷ (α→α→Bool) → (α→α) → α→α
+repeatUntil p f = rep . iterate f
+    where
+        rep (x:y:xs) | p x y = x
+                     | otherwise = rep (y:xs)
+        rep _ = undefined
+ 
 --- Inline 'trivial' EBNFs
 inline ∷ EMap → EBNF → EBNF
-inline emap x = inl x
+inline emap x = repeatUntil (==) inl x
     where
         inl Alt{elems}  = (normalize . Alt) (map inl elems)
-        inl Seq{elems}  = Seq (map inl elems)
-        inl Qnt{quantor, elem}   = Qnt quantor (inl elem)
+        inl Seq{elems}  = (normalize . Seq) (map inl elems)
+        inl Qnt{quantor, elem}   = (normalize . Qnt quantor) (inl elem)
         inl NonT{name}  = case Map.lookup name emap of
                             Just prod | trivial prod = prod.ebnf
                             other = NonT name
-        inl term        = term   
+        inl term        = term
 
 --- Factor left
 --- > (a b | a c | d) ==> (a (b | c) | d)
-factorLeft Alt{elems=seqs} = case go . map prefix $ seqs of
-        elems | elems == seqs = normalize . Alt . map factorLeft $ elems
-              | otherwise     = factorLeft . Alt $ elems
+factorLeft e = case e of
+        Alt{}               = case repeatUntil (==) leftAlt e of
+                    Alt{elems}  = normalize . Alt . map factorLeft $ elems
+                    other       = factorLeft other
+        Seq{elems}          = normalize . Seq . map factorLeft $ elems
+        Qnt{quantor, elem}  = normalize . Qnt quantor . factorLeft $ elem
+        other               = other
     where
-        go [] = []
-        go ((xp,xt):ys) 
-            | null ts = normalize (Seq (xp:xt)) : go ys
-            | otherwise = normalize (Seq [xp, Alt (map Seq (xt:map snd ts)) ]) : go xs
+        leftAlt Alt{elems}   = normalize . Alt . left . map prefix $ elems
+        leftAlt other        = other
+        left [] = []
+        left ((xp,xt):ys) 
+            | null ts = normalize (Seq (xp:xt)) : left ys
+            | otherwise = normalize (Seq [xp, Alt (map Seq (xt:map snd ts)) ]) : left xs
             where
-                (ts,xs) = partitioned ((xp==) . fst) ys
-factorLeft Seq{elems} = normalize . Seq . map factorLeft $ elems
-factorLeft Qnt{quantor, elem} = normalize . Qnt quantor . factorLeft $ elem
-factorLeft other = other
+                (ts,xs) = partition ((xp==) . fst) ys
 
 --- Factor right
 --- > (a z | b z | c) ==> ((a | b) z | c)
-factorRight Alt{elems} = case go . map suffix $ elems of
-        elems'  | elems' == elems   = normalize . Alt . map factorRight $ elems     -- go deeper
-                | otherwise         = factorRight . Alt $ elems'                    -- repeat
+factorRight e = case e of
+        Alt{}               = case repeatUntil (==) rightAlt e of
+                    Alt{elems}  = normalize . Alt . map factorRight $ elems     -- go deeper
+                    other       = other
+        Seq{elems}          = normalize . Seq . map factorRight $ elems
+        Qnt{quantor, elem}  = normalize . Qnt quantor . factorRight $ elem
+        other               = other
     where
-        go [] = []
-        go ((xi, xl):ys)
-            | null same = normalize (Seq (xi++[xl])) : go ys
-            | otherwise = normalize (Seq [Alt (map Seq (xi:map fst same)), xl ]) : go xs
+        rightAlt Alt{elems} = normalize . Alt . right . map suffix $ elems
+        rightAlt other      = other
+        right [] = []
+        right ((xi, xl):ys)
+            | null same = normalize (Seq (xi++[xl])) : right ys
+            | otherwise = normalize (Seq [Alt (map Seq (xi:map fst same)), xl ]) : right xs
             where
-                (same,xs) = partitioned ((xl==) . snd) ys
-factorRight Seq{elems} = normalize . Seq . map factorRight $ elems
-factorRight Qnt{quantor, elem} = normalize . Qnt quantor . factorRight $ elem
-factorRight other = other
+                (same,xs) = partition ((xl==) . snd) ys
 
 
-convert ∷ EMap → YProd → EMap
-convert map (yprod@YProd name rules) = Map.insert name eprod map
-    where
-        eprod = optimize map (convProd yprod) 
+--convert ∷ EMap → YProd → EMap
+--convert map (yprod@YProd name rules) = Map.insert name eprod map
+--    where
+--        eprod = optimize (convProd yprod) 
 
 isAtomic Term{name} = true
 isAtomic NonT{name} = true
@@ -211,17 +226,30 @@ work ymap emap =(ydocs ++ edocs)
         order = topo ymap       -- dependency order, items with least dependencies first
         oprod = [ [ YProd n rs | n ← group, rs ← Map.lookup n ymap ] | group ← order ]
         emap' = fold convertgroup emap oprod -- full EBNF
-        convertgroup emap yprods = insProds emap oprods
+        convertgroup emap yprods = {- withDump [
+                                        dump "eprods" eprods,
+                                        dump "names"  names,
+                                        dump "mape"   mape,
+                                        dump "mapo"   mapo,
+                                        dump "mapi"   mapi,
+                                        dump "mapO"   mapO,
+                                    ] -}
+                                    mapO
             where
-                insProds = fold (\m eprod → Map.insert eprod.name eprod m)
-                eprods = map convProd yprods
-                mapp   = insProds emap eprods
-                oprods = map (optimize mapp) eprods 
+                eprods = map convProd  yprods      -- optimized prods
+                !names = map EDef.name eprods
+                mape   = fold (\m\p → Map.insert p.name p m) emap eprods     -- prods
+                mapo   = fold (\m n → Map.adjust optimize n m) mape names    -- optimized prods
+                mapi   = fold (\m\n → Map.adjust _.{ebnf ← inline m} n m) mapo names
+                mapO  = fold (\m\n → Map.adjust optimize n m) mapi names
+                -- mapO   = fold (\m\n → Map.adjust optimize n m) mapO1 names
         ydocs = [ show eprod | n ← reverse (concat order),     -- print only non simple ones 
-                                    eprod ← Map.lookup n emap',
-                                    true || not (trivial eprod) ]
-        edocs = [ show eprod | eprod ← Map.values emap, true || not (trivial eprod) ] 
-        
+                                    eprod ← Map.lookup n emap' ]
+        edocs = [ show eprod | eprod ← Map.values emap ] 
+
+dump str map = traceLn (str ++ ": " ++ show map)
+withDump items y = if or items then y else y
+
 {--
     Run with
     > java ... examples.Yacc2EBNF foo.y bar.ebnf

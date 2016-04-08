@@ -23,6 +23,7 @@ module de.contexo.data.EBNF where
 import Data.MicroParsec as P()
 import Data.HashMap as Map()
 import Data.Iterators(StringIterator SI)
+import Data.JSON(ToJSON)
 
 
 --- Data type for extended Backus-Naur Form (EBNF) rules.
@@ -64,13 +65,21 @@ data EBNF = Alt {elems :: [EBNF] }      --- alternatives, normally not empty
  
 instance Show EBNF where show = EBNF.showp 0
 derive Eq EBNF
+instance ToJSON EBNF where
+    toJSON Alt{elems} = JSON.struct "Alt" (toJSON elems)
+    toJSON Seq{elems} = JSON.struct "Seq" (toJSON elems)
+    toJSON Qnt{quantor, elem} = JSON.struct "Qnt" (toJSON (quantor, elem))
+    toJSON Term{name} = JSON.struct "Term" (toJSON name)
+    toJSON NonT{name} = JSON.struct "NonT" (toJSON name)
 
 --- An EBNF definition
 data EDef = Def { !name :: String, !ebnf :: EBNF }
 derive Eq EDef
 instance Show EDef where
     show def = def.name ++ " ::= " ++ show def.ebnf
-
+instance ToJSON EDef where
+    toJSON Def{name, ebnf} = JSON.struct "Def" (toJSON (name, ebnf))
+    
 --- remove unnessecary complexity from EBNF, and give errors for multiple quantifications
 --- Invariants guaranteed after completion:
 --- 1. An 'Alt' contains no empty 'Seq'
@@ -135,7 +144,9 @@ suffix e = case e of
 data Quantor = Many | Some | Optional
 deriving Eq     Quantor
 deriving Show   Quantor
-          
+instance ToJSON Quantor where
+    toJSON = JSON.String . show
+
 
 --- a map of EBNF productions
 type EMap = Map.HashMap String EDef
@@ -166,8 +177,8 @@ pQnt = do
 
 --- Parse a 'Term', 'NonT' or 'Alt' in parentheses    
 pTerm ∷ P.Parser Iterators.StringIterator Char EBNF
-pTerm = Term <$> pName
-    <|> NonT <$> (pChar <|> pStr <|> pClass)
+pTerm = NonT <$> pName
+    <|> Term <$> (pChar <|> pStr <|> pClass)
     <|> P.symbol (P.between pLeft pRight pAlt)
 
 --- Parse "::=", ":" or "="
