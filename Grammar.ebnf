@@ -4,7 +4,7 @@ definition ::= DOCUMENTATION definition?|topdefinition|visibledefinition
 topdefinition ::= import|fixity operators|NATIVE PACKAGE typeclause interfaces 'where' '{' jtokens? '}'|publicdefinition
 visibledefinition ::= (PRIVATE|PROTECTED|PUBLIC) publicdefinition|ABSTRACT datainit wheredef
 publicdefinition ::= typedef|(datainit|INSTANCE insthead) wheredef|classdef|DERIVE insthead|localdef
-classdef ::= CLASS ccontext (EARROW CONID tyvar)? wheredef
+classdef ::= CLASS ccontext ('=>' CONID tyvar)? wheredef
 datadef ::= datainit wheredef
 instdef ::= INSTANCE insthead wheredef
 wheredef ::= ('where' '{' localdefs? '}')?
@@ -38,7 +38,7 @@ fundef ::= binex ('=' expr|guards)|fundef WHERE '{' letdefs? '}'
 letdef ::= annotation|fundef
 letdefs ::= (annotation|fundef) (semicoli letdefs?)?
 calts ::= calt (';' calts?)?
-topex ::= (IF expr ';'? 'then' expr ';'? ELSE|LET '{' letdefs '}' IN) expr|CASE expr OF '{' calts '}'|'\' apats lambdabody|appex
+topex ::= ('if' expr ';'? 'then' expr ';'? 'else'|LET '{' letdefs '}' IN) expr|'case' expr OF '{' calts '}'|'\' apats lambdabody|appex
 binex ::= binex (SOMEOP|'-') binex|'-'? topex
 expr ::= binex ('::' (forall|rho))?
 pattern ::= expr
@@ -72,7 +72,7 @@ sigex ::= (forall|rho) (THROWS tauSC)?
 typedef ::= TYPE CONID dvars? '=' (forall|rho)
 sigma ::= forall|rho
 derivedef ::= DERIVE insthead
-insthead ::= icontext (EARROW tyname simpletype)?
+insthead ::= icontext ('=>' tyname simpletype)?
 icontext ::= qconid simpletype|'(' sicontexts ')'
 sicontexts ::= qconid simpletype (',' sicontexts?)?
 sicontext ::= qconid simpletype
@@ -85,11 +85,11 @@ typeclause ::= (TYPE tau)?
 rhofun ::= simpletypes ('->' rhofun)?
 tauSB ::= tau ('|' tauSB)?
 tauSC ::= tau (',' tauSC)?
-tau ::= simpletypes ('->' tau)?|FORALL boundvars mbdot rho
+tau ::= simpletypes ('->' tau)?|forall
 simpletype ::= tyvar|tyname|'(' tau (',' tauSC|'|' tauSB)? ')'|'[' tau ']'
 simpletypes ::= simpletype simpletypes?
 tapp ::= simpletypes
-rho ::= (simpletypes EARROW)? rhofun
+rho ::= (simpletypes '=>')? rhofun
 forall ::= FORALL boundvars ('.'|SOMEOP) rho
 boundvars ::= VARID boundvars?
 boundvar ::= VARID
@@ -100,7 +100,7 @@ moduleclause ::= docs? PROTECTED? PACKAGE modulename1|moduleclause words '(' qva
 docs ::= DOCUMENTATION (semicoli? docs)?
 documentation ::= DOCUMENTATION
 dvars ::= tyvar dvars?
-elsex ::= ';'? ELSE
+elsex ::= ';'? 'else'
 infix ::= fixity operators
 fixity ::= (INFIX|INFIXL|INFIXR) INTCONST
 fldids ::= fldid (',' fldids)?
@@ -108,7 +108,7 @@ fldid ::= (PUBLIC|PRIVATE)? strictfldid
 jitem ::= rawnativename|SOMEOP|'!'|'?'
 wheretokens ::= 'where' '{' jtokens? '}'
 jtokens ::= (jtoken|'{' jtokens? '}') jtokens?
-jtoken ::= VARID|CONID|QVARID|QCONID|CONID '.'|DOCUMENTATION|PACKAGE|IMPORT|INFIX|INFIXR|INFIXL|NATIVE|DATA|'where'|CLASS|INSTANCE|ABSTRACT|TYPE|TRUE|FALSE|IF|'then'|ELSE|CASE|OF|DERIVE|LET|IN|DO|FORALL|PRIVATE|PROTECTED|PUBLIC|PURE|THROWS|MUTABLE|INTCONST|STRCONST|LONGCONST|FLTCONST|DBLCONST|CHRCONST|'->'|'::'|'<-'|EARROW|'..'|SOMEOP|INTERPRET|','|'|'|'['|']'|'('|')'|'.'|'?'|'-'|';'|'!'|'='|'\'
+jtoken ::= VARID|CONID|QVARID|QCONID|CONID '.'|DOCUMENTATION|PACKAGE|IMPORT|INFIX|INFIXR|INFIXL|NATIVE|DATA|'where'|CLASS|INSTANCE|ABSTRACT|TYPE|TRUE|FALSE|'if'|'then'|'else'|'case'|OF|DERIVE|LET|IN|DO|FORALL|PRIVATE|PROTECTED|PUBLIC|PURE|THROWS|MUTABLE|INTCONST|STRCONST|LONGCONST|FLTCONST|DBLCONST|CHRCONST|'->'|'::'|'<-'|'=>'|'..'|SOMEOP|INTERPRET|','|'|'|'['|']'|'('|')'|'.'|'?'|'-'|';'|'!'|'='|'\'
 scontexts ::= qconid tyvar (',' scontexts?)?
 scontext ::= qconid tyvar
 tyvar ::= VARID|'(' VARID '::' kind ')'
@@ -142,15 +142,18 @@ word ::= VARID
 GETS ::= '<-'
 THEN ::= 'then'
 CONID ::= (UppercaseLetter|'_') (Letter|Digit|'_'|"'")*
+IF ::= 'if'
 DCOLON ::= '::'
+ELSE ::= 'else'
 UppercaseLetter ::= '«any character in Unicode categories Letter and Uppercase»'
 LowercaseLetter ::= '«any character in Unicode categories Letter and not Uppercase»'
+CASE ::= 'case'
 Digit ::= [0-9]
 QUALIFIER ::= CONID '.'
 ARROW ::= '->'
 WHERE ::= 'where'
 Letter ::= '«any character in Unicode category: Letter»'
-DARROW ::= '=>'
+EARROW ::= '=>'
 VARID ::= (LowercaseLetter|'_') (Letter|Digit|'_'|"'")*
 DOTDOT ::= '..'
 
