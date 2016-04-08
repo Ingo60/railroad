@@ -1,20 +1,20 @@
 module ::= moduleclause (';' definitions|'where' '{' definitions '}')|'{' definitions '}'
 definitions ::= definition (semicoli definitions?)?
-definition ::= DOCUMENTATION definition?|visibledefinition|topdefinition
+definition ::= DOCUMENTATION definition?|topdefinition|visibledefinition
 topdefinition ::= import|fixity operators|NATIVE PACKAGE typeclause interfaces 'where' '{' jtokens? '}'|publicdefinition
-visibledefinition ::= (PRIVATE|PUBLIC|PROTECTED) publicdefinition|ABSTRACT datainit wheredef
-publicdefinition ::= typedef|datainit wheredef|classdef|INSTANCE insthead wheredef|DERIVE insthead|localdef
+visibledefinition ::= (PRIVATE|PROTECTED|PUBLIC) publicdefinition|ABSTRACT datainit wheredef
+publicdefinition ::= typedef|(datainit|INSTANCE insthead) wheredef|classdef|DERIVE insthead|localdef
 classdef ::= CLASS ccontext (EARROW CONID tyvar)? wheredef
 datadef ::= datainit wheredef
 instdef ::= INSTANCE insthead wheredef
 wheredef ::= ('where' '{' localdefs? '}')?
 localdefs ::= dplocaldef (semicoli localdefs?)?
 dplocaldef ::= DOCUMENTATION dplocaldef?|plocaldef
-plocaldef ::= (PUBLIC|PROTECTED|PRIVATE)? localdef
-localdef ::= annotation|PURE? impurenativedef|fundef
+plocaldef ::= (PRIVATE|PROTECTED|PUBLIC)? localdef
+localdef ::= annotation|PURE? NATIVE methodspec '::' sigexs|fundef
 appex ::= appex? unex
-lambdabody ::= '\' apats lambdabody|('->'|'→') expr
-getfield ::= VARID (('<-'|'←'|'=') expr)?
+lambdabody ::= '\' apats lambdabody|'->' expr
+getfield ::= VARID (('<-'|'=') expr)?
 getfields ::= getfield (',' getfields?)?
 dodefs ::= lcqual (semicoli dodefs?)?
 lcqual ::= gqual|expr '=' expr|LET '{' letdefs '}'
@@ -23,50 +23,50 @@ exprSS ::= expr (';' exprSS?)?
 exprSC ::= expr (',' exprSC?)?
 field ::= VARID ('=' expr)?
 fields ::= field (',' fields?)?
-term ::= qvarid|literal|'_'|qconid ('{' fields? '}')?|'[' ((expr '|' lcquals)? ']'|exprSC (']'|DOTDOT expr? ']'))|'(' (('-'|'!'|'?'|commata)? ')'|binex ('-'|SOMEOP) ')'|SOMEOP expr? ')'|expr (';' exprSS|',' exprSC)? ')')
-primary ::= term|DO '{' dodefs '}'|primary '.' (VARID|SOMEOP|'!'|'?'|'{' (VARID ('?'|'<-'|'←'|'=') '}'|getfields '}')|'[' expr ']')|qualifiers '{' (getfields '}'|VARID ('<-'|'←'|'='|'?') '}')
+term ::= qvarid|literal|'_'|qconid ('{' fields? '}')?|'(' ((commata|'!'|'?'|'-')?|SOMEOP expr?|binex (SOMEOP|'-')|expr (',' exprSC|';' exprSS)?) ')'|'[' ((expr '|' lcquals)?|exprSC ('..' expr?)?) ']'
+primary ::= term|(DO '{' dodefs|qualifiers '{' (VARID ('?'|'='|'<-')|getfields)) '}'|primary '.' (VARID|SOMEOP|'!'|'?'|'{' (VARID ('?'|'='|'<-')|getfields) '}'|'[' expr ']')
 unex ::= primary|('!'|'?') unex
 apats ::= unex apats?
 lambda ::= '\' apats lambdabody
 wherelet ::= 'where' '{' letdefs? '}'
-gqual ::= expr (('<-'|'←') expr)?
+gqual ::= expr ('<-' expr)?
 gquals ::= gqual (',' gquals?)?
-guard ::= '|' gquals ('->'|'→'|'=') expr
+guard ::= '|' gquals ('->'|'=') expr
 guards ::= '|' gquals aeq expr guards?
 funhead ::= binex
-fundef ::= binex ('=' expr|guards)|fundef wherelet
+fundef ::= binex ('=' expr|guards)|fundef WHERE '{' letdefs? '}'
 letdef ::= annotation|fundef
 letdefs ::= (annotation|fundef) (semicoli letdefs?)?
 calts ::= calt (';' calts?)?
-topex ::= (IF expr ';'? THEN expr ';'? ELSE|LET '{' letdefs '}' IN) expr|appex|'\' apats lambdabody|CASE expr OF '{' calts '}'
+topex ::= (IF expr ';'? 'then' expr ';'? ELSE|LET '{' letdefs '}' IN) expr|CASE expr OF '{' calts '}'|'\' apats lambdabody|appex
 binex ::= binex (SOMEOP|'-') binex|'-'? topex
-expr ::= binex (('::'|'∷') (forall|rho))?
+expr ::= binex ('::' (forall|rho))?
 pattern ::= expr
-calt ::= expr (('->'|'→'|'=') expr|guards)|calt wherelet
-aeq ::= '->'|'→'|'='
+calt ::= expr (('->'|'=') expr|guards)|calt WHERE '{' letdefs? '}'
+aeq ::= '->'|'='
 import ::= IMPORT modulename1 (VARID? CONID)? importliste
-importliste ::= (VARID '(' importspecs ')'|'(' importspecs? ')'|PUBLIC importliste)?
+importliste ::= ((VARID '(' importspecs|'(' importspecs?) ')'|PUBLIC importliste)?
 importspecs ::= importspec (',' importspecs?)?
 importspec ::= importitem (VARID|CONID|SOMEOP)?|PUBLIC importspec
-importitem ::= qvarid|CONID '(' memspecs? ')'|'!'|'?'|SOMEOP|qconid
+importitem ::= qvarid|CONID '(' memspecs? ')'|qconid|SOMEOP|'!'|'?'
 memspecs ::= memspec (',' memspecs?)?
 memspec ::= (VARID|CONID|SOMEOP) (VARID|CONID|SOMEOP)?|PUBLIC memspec
 alias ::= VARID|CONID|SOMEOP
-annotation ::= annoitems ('::'|'∷') (forall|rho)
+annotation ::= annoitems '::' (forall|rho)
 annoitems ::= annoitem (',' annoitems)?
-nativedef ::= PURE? impurenativedef
-impurenativedef ::= NATIVE methodspec ('::'|'∷') sigexs
+nativedef ::= PURE? NATIVE methodspec '::' sigexs
+impurenativedef ::= NATIVE methodspec '::' sigexs
 methodspec ::= fitem ((rawnativename|SOMEOP|'!'|'?') ('{' tauSC? '}')?|'{' tauSC? '}')?
 fitem ::= annoitem|'!'|'?'|'-'|SOMEOP
 annoitem ::= VARID|'(' (SOMEOP|'!'|'?'|'-') ')'
-datainit ::= DATA CONID ('=' (nativepur nativespec|dalts)|dvars '=' (dalts|nativepur nativespec))|NEWTYPE CONID dvars? '=' dalt
+datainit ::= DATA CONID dvars? '=' (nativepur nativespec|dalts)|NEWTYPE CONID dvars? '=' dalt
 dalts ::= dalt ('|' dalts)?
 dalt ::= visdalt DOCUMENTATION?|DOCUMENTATION visdalt
-visdalt ::= (PROTECTED|PRIVATE|PUBLIC)? strictdalt
+visdalt ::= (PUBLIC|PRIVATE|PROTECTED)? strictdalt
 strictdalt ::= ('!'|'?')? simpledalt
-simpledalt ::= CONID (simpletypes|'{' conflds '}')?
-conflds ::= confld ((DOCUMENTATION|',') conflds?)?
-confld ::= docs? fldids ('::'|'∷') (forall|rho)
+simpledalt ::= CONID ('{' conflds '}'|simpletypes)?
+conflds ::= confld ((','|DOCUMENTATION) conflds?)?
+confld ::= docs? fldids '::' (forall|rho)
 sigexs ::= sigex ('|' sigexs)?
 sigex ::= (forall|rho) (THROWS tauSC)?
 typedef ::= TYPE CONID dvars? '=' (forall|rho)
@@ -82,11 +82,11 @@ gargs ::= '{' tauSC? '}'
 moduledefinition ::= NATIVE PACKAGE typeclause interfaces 'where' '{' jtokens? '}'
 interfaces ::= (CLASS tauSC)?
 typeclause ::= (TYPE tau)?
-rhofun ::= simpletypes (('->'|'→') rhofun)?
+rhofun ::= simpletypes ('->' rhofun)?
 tauSB ::= tau ('|' tauSB)?
 tauSC ::= tau (',' tauSC)?
-tau ::= simpletypes (('->'|'→') tau)?|FORALL boundvars mbdot rho
-simpletype ::= tyvar|tyname|'(' tau ('|' tauSB|',' tauSC)? ')'|'[' tau ']'
+tau ::= simpletypes ('->' tau)?|FORALL boundvars mbdot rho
+simpletype ::= tyvar|tyname|'(' tau (',' tauSC|'|' tauSB)? ')'|'[' tau ']'
 simpletypes ::= simpletype simpletypes?
 tapp ::= simpletypes
 rho ::= (simpletypes EARROW)? rhofun
@@ -94,26 +94,26 @@ forall ::= FORALL boundvars ('.'|SOMEOP) rho
 boundvars ::= VARID boundvars?
 boundvar ::= VARID
 ccontext ::= qconid tyvar|'(' scontexts ')'
-tyname ::= qconid|'[' ']'|'(' (commata|'->'|'→')? ')'
+tyname ::= qconid|'[' ']'|'(' (commata|'->')? ')'
 commata ::= ',' commata?
-moduleclause ::= docs PROTECTED? PACKAGE modulename1|moduleclause words '(' qvarids ')'|PROTECTED? PACKAGE modulename1
+moduleclause ::= docs? PROTECTED? PACKAGE modulename1|moduleclause words '(' qvarids ')'
 docs ::= DOCUMENTATION (semicoli? docs)?
 documentation ::= DOCUMENTATION
 dvars ::= tyvar dvars?
 elsex ::= ';'? ELSE
 infix ::= fixity operators
-fixity ::= (INFIX|INFIXR|INFIXL) INTCONST
+fixity ::= (INFIX|INFIXL|INFIXR) INTCONST
 fldids ::= fldid (',' fldids)?
-fldid ::= (PRIVATE|PUBLIC)? strictfldid
+fldid ::= (PUBLIC|PRIVATE)? strictfldid
 jitem ::= rawnativename|SOMEOP|'!'|'?'
 wheretokens ::= 'where' '{' jtokens? '}'
-jtokens ::= jtoken jtokens?|'{' jtokens? '}' jtokens?
-jtoken ::= VARID|CONID|QVARID|QCONID|CONID '.'|DOCUMENTATION|PACKAGE|IMPORT|INFIX|INFIXR|INFIXL|NATIVE|DATA|'where'|CLASS|INSTANCE|ABSTRACT|TYPE|TRUE|FALSE|IF|THEN|ELSE|CASE|OF|DERIVE|LET|IN|DO|FORALL|PRIVATE|PROTECTED|PUBLIC|PURE|THROWS|MUTABLE|INTCONST|STRCONST|LONGCONST|FLTCONST|DBLCONST|CHRCONST|'->'|'→'|'::'|'∷'|'<-'|'←'|EARROW|DOTDOT|SOMEOP|INTERPRET|','|'|'|'['|']'|'('|')'|'.'|'?'|'-'|';'|'!'|'='|'\'
+jtokens ::= (jtoken|'{' jtokens? '}') jtokens?
+jtoken ::= VARID|CONID|QVARID|QCONID|CONID '.'|DOCUMENTATION|PACKAGE|IMPORT|INFIX|INFIXR|INFIXL|NATIVE|DATA|'where'|CLASS|INSTANCE|ABSTRACT|TYPE|TRUE|FALSE|IF|'then'|ELSE|CASE|OF|DERIVE|LET|IN|DO|FORALL|PRIVATE|PROTECTED|PUBLIC|PURE|THROWS|MUTABLE|INTCONST|STRCONST|LONGCONST|FLTCONST|DBLCONST|CHRCONST|'->'|'::'|'<-'|EARROW|'..'|SOMEOP|INTERPRET|','|'|'|'['|']'|'('|')'|'.'|'?'|'-'|';'|'!'|'='|'\'
 scontexts ::= qconid tyvar (',' scontexts?)?
 scontext ::= qconid tyvar
-tyvar ::= VARID|'(' VARID ('::'|'∷') kind ')'
+tyvar ::= VARID|'(' VARID '::' kind ')'
 simplekind ::= SOMEOP|VARID|'(' kind ')'
-kind ::= simplekind (('->'|'→') kind)?
+kind ::= simplekind ('->' kind)?
 literal ::= TRUE|FALSE|CHRCONST|STRCONST|INTCONST|BIGCONST|LONGCONST|FLTCONST|DBLCONST|REGEXP
 mbdot ::= '.'|SOMEOP
 modulename ::= modulename1
@@ -123,28 +123,34 @@ nativepur ::= (PURE|MUTABLE)? NATIVE
 operators ::= (SOMEOP|VARID|'-') operators?
 opstring ::= SOMEOP|VARID|'-'
 qvarids ::= qvarop (',' qvarids)?
-qvarop ::= CONID '.' (CONID '.')? (VARID|'!'|'?')|SOMEOP|VARID|'!'|'?'
+qvarop ::= (CONID '.' (CONID '.')?)? (VARID|'!'|'?')|SOMEOP
 operator ::= SOMEOP
-strictfldid ::= ('?'|'!')? VARID
+strictfldid ::= ('!'|'?')? VARID
 plainfldid ::= VARID
-qconid ::= CONID '.' (CONID '.')? CONID|CONID
+qconid ::= (CONID '.' (CONID '.')?)? CONID
 qualifiers ::= CONID '.' (CONID '.')?
 qvarid ::= CONID '.' (CONID '.')? (VARID|'!'|'?')|VARID
 rawnativename ::= (VARID|PACKAGE) ('.' rawnativename)?|CONID|CONID '.' rawnativename|STRCONST
 semicoli ::= ';' semicoli?
-thenx ::= ';'? THEN
+thenx ::= ';'? 'then'
 varop ::= VARID|'!'|'?'
 unop ::= '!'|'?'
 varid ::= VARID
 varidkw ::= VARID|DATA|TYPE|NATIVE|PURE|PACKAGE|IMPORT
 words ::= VARID words?
 word ::= VARID
-GETS ::= '<-'|'←'
-DCOLON ::= '::'|'∷'
-LowercaseLetter ::= '«any character in Unicode category: Letter, Lowercase»'
+GETS ::= '<-'
+THEN ::= 'then'
+CONID ::= (UppercaseLetter|'_') (Letter|Digit|'_'|"'")*
+DCOLON ::= '::'
+UppercaseLetter ::= '«any character in Unicode categories Letter and Uppercase»'
+LowercaseLetter ::= '«any character in Unicode categories Letter and not Uppercase»'
+Digit ::= [0-9]
 QUALIFIER ::= CONID '.'
-ARROW ::= '->'|'→'
+ARROW ::= '->'
 WHERE ::= 'where'
 Letter ::= '«any character in Unicode category: Letter»'
-VARID ::= (LowercaseLetter|'_') (Letter|'_'|"'")*
+DARROW ::= '=>'
+VARID ::= (LowercaseLetter|'_') (Letter|Digit|'_'|"'")*
+DOTDOT ::= '..'
 
