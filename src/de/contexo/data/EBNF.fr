@@ -19,11 +19,12 @@
 -}
 module de.contexo.data.EBNF where
 
--- import Data.List
+import Data.List
 import Data.MicroParsec as P()
 import Data.HashMap as Map()
 import Data.Iterators(StringIterator SI)
 import Data.JSON(ToJSON)
+
 
 
 --- Data type for extended Backus-Naur Form (EBNF) rules.
@@ -96,17 +97,38 @@ normalize Alt{elems} = case flatAlt elems of
         flatAlt (x:xs) = case normalize x of
             Alt{elems} → flatAlt (elems ++ xs)
             y          → y : flatAlt xs
-normalize Seq{elems} = case flatSeq elems of
+normalize Seq{elems} = case flatSeq (map normalize elems) of
         [x] → x
-        xs  → Seq xs
+        []  → Seq []
+        xs  → normQuantors (inits xs) (tails xs) -- check for  a b c (a b c)?*+ x y z
     where
+        -- for each corresponding pair it is so that a++b give the original Seq list
+        normQuantors (a:as) ([]:bs) = Seq a                 -- list exhausted for empty tail
+        normQuantors (a:as) (b:bs) = case b of
+            Qnt q elem:es | a == items elem = case q of
+                Many → normalize (Seq (Qnt Some elem : es)) -- a a*   ==>  a+
+                Some → normalize (Seq b)                    -- a a+   ==>  a+
+                _    → normQuantors as bs                   -- not applicable, try next
+            _   = normQuantors as bs
+        normQuantors _ _ = Term "'cannot happen'"
         flatSeq [] = []
-        flatSeq (x:xs) = case normalize x of
+        flatSeq (x:xs) = case  x of
             Seq{elems}  → flatSeq (elems ++ xs)
+            Qnt Many y  → case common ys xs of                      --  (a b c d)* a b x y
+                    ([], _, _) → Qnt Many y : flatSeq xs            --  a b (c d a b)* x y
+                    (cs, as, bs) → flatSeq (cs ++ (Qnt Many (Seq (as ++ cs)) : bs))
+                where
+                    !ys = items y
+                    -- identify common prefix
+                    common as bs = (cs, drop ncs as, drop ncs bs)
+                        where
+                            !cs = (map fst . takeWhile (uncurry (==)) . zip as) bs
+                            ncs = length cs 
             y           → y : flatSeq xs
 
 normalize Qnt{quantor, elem} = case normalize elem of
-        e@Qnt{} → error ("Illegal EBNF: "  ++ show Qnt{quantor, elem}
+        e@Qnt{} | Some ← e.quantor, Optional ← quantor = Qnt Many e.elem
+                | otherwise → error ("Illegal EBNF: "  ++ show Qnt{quantor, elem}
                     ++ "\nnormalizes to: " ++ show Qnt{quantor, elem=e})
         e@Seq [] → error ("Illegal EBNF: " ++ show Qnt{quantor, elem}
                     ++ "\nnormalizes to: " ++ show Qnt{quantor, elem=e})
@@ -135,10 +157,16 @@ prefix a = case a of
     Seq xs = (head xs, tail xs)
     e      = (e, [])
 
+--- Tell the last 'Qnt', 'Tern' or 'NonT' and the preceding part
+--- Apply only to normalized expressions that are not @Seq []@
 suffix e = case e of
     Seq xs = (init xs, last xs)
     _      = ([], e)
-    
+
+--- Make a list of expressions from the current one.
+--- This makes a 'Seq' @xs@ to @xs@ and any other @expr@ to @[expr]@
+items Seq{elems} = elems
+items other      = [other]
 
 --- An EBNF Item can be quantified with ?, * or +
 data Quantor = Many | Some | Optional
