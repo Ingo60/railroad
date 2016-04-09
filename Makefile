@@ -14,3 +14,6 @@ all:
 
 run:
 	$(FREGE) $(MAIN) $(Y) $(E) > $(O)
+
+test:
+	$(FREGE) $(MAIN) test.y lex.ebnf
