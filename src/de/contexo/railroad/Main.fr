@@ -16,6 +16,8 @@ import Data.Graph
 
 import de.contexo.data.EBNF as E
 
+import fregefx.JavaFxAll hiding(ListView)
+import fregefx.JavaFxUtils
 
 -- ---------------------------------------------------------------------------
 --      YACC data types
@@ -80,8 +82,8 @@ grammar = do
 
 
 parseYacc :: String -> IO (Either String YGram)
-parseYacc src = do
-        content ← readFile src 
+parseYacc content = do
+        -- content ← readFile src 
         let lines = '\r?\n'.splitted content
             yaccsep = '^%%\s*$'
             ylines = takeWhile (!~ yaccsep) . drop 1 . dropWhile (!~ yaccsep) $ lines
@@ -95,8 +97,8 @@ parseYacc src = do
     `catch` \(e::IOException) -> pure . Left $ e.show 
 
 parseEBNF :: String -> IO (Either String [EDef])
-parseEBNF src = do
-        content ← readFile src 
+parseEBNF content = do
+        -- content ← readFile src 
         pure (parseGrammar content)
     `catch` \(e::IOException) -> pure . Left $ e.show
 
@@ -265,7 +267,7 @@ withDump items y = if or items then y else y
 
 {--
     Run with
-    > java ... examples.Yacc2EBNF foo.y bar.ebnf
+    > java ... [-gui] examples.Yacc2EBNF foo.y bar.ebnf
 
     The first argument must name a YACC source.
 
@@ -274,23 +276,45 @@ withDump items y = if or items then y else y
     if your grammar has terminal symbols produced by a tokenizer/lexer.
 
 -}
-main args = case args of
+main :: [String] → IO Bool
+main ("-gui":args) = gui args >> pure true
+main args = commandline args
+
+commandline args = case args of
     [yaccsrc, ebnfsrc]
-        | '\.y$' ← yaccsrc, '\.ebnf' ← ebnfsrc = do
-            answer ← parseYacc yaccsrc 
+        | yaccsrc ~ '\.y$', ebnfsrc !~ '\.y$' = do
+            answer ← readFile yaccsrc >>= parseYacc 
             case answer of
                 Right rules  → do
                     stderr.printf "%s: parsed %d yacc rules\n" yaccsrc (Map.size rules)
-                    answer ← parseEBNF ebnfsrc
+                    answer ← readFile ebnfsrc >>= parseEBNF
                     case answer of
                         Right eprods → do
                             stderr.printf "%s: parsed %d EBNF rules\n" ebnfsrc (length eprods)
                             let emap = fold (\m\def -> Map.insert def.name def m) empty eprods
                             mapM_ println (work rules emap)
                             stdout.println
+                            pure true
                         Left error → do
                             stderr.println (ebnfsrc ++ ": " ++ error)
-                Left error   → stderr.println (yaccsrc ++ ": " ++ error)
+                            pure false
+                Left error   → stderr.println (yaccsrc ++ ": " ++ error) >> pure false
+        `catch` \(e::IOException) -> stderr.println e.show >> pure false
     _ -> do
         stderr.println "Usage: java ... examples.Yacc2EBNF foo.y bar.ebnf"
+        pure false
 
+gui [yaccsrc, ebnfsrc] | yaccsrc ~ '\.y$', ebnfsrc !~ '\.y$' = do
+         FregeFX.launch $ buildUI
+    where
+        buildUI :: Stage -> IO ()
+        buildUI stage = do
+            stage.setTitle "Yacc-EBNF-SVG Railroad Generator"
+            layout ← BorderPane.new ()
+            scene ← Scene.new layout 800.0 500.0
+            stage.setScene scene 
+            stage.show
+
+
+
+gui _ = stderr.println "Usage: java ... examples.Yacc2EBNF foo.y bar.ebnf"
