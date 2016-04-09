@@ -194,11 +194,24 @@ factorRight e = case e of
             where
                 (same,xs) = partition ((xl==) . snd) ys
 
+{--
+    > self ::=  foo                 self ::= (baz | buz)* (foo | bar)
+    >           | bar
+    >           | baz self
+    >           | buz self
+-}
+unRecurse (Def self e) = case e of 
+        Alt{elems} = (Def self . normalize . Alt . unright) elems
+        Seq{}      = (Def self . normalize . Seq . unright) [e]
+        _          = Def self e 
+    where 
+        unright xs  | null recs = xs
+                    | otherwise = [Seq [
+                                    Qnt Many (Alt (map (Seq . fst) recs)),
+                                    Alt (map (\(es,e) → Seq (es++[e])) nonrecs)
+                                    ]]
+            where (recs, nonrecs) = partition ((NonT self ==) . snd) (map suffix xs)
 
---convert ∷ EMap → YProd → EMap
---convert map (yprod@YProd name rules) = Map.insert name eprod map
---    where
---        eprod = optimize (convProd yprod) 
 
 isAtomic Term{name} = true
 isAtomic NonT{name} = true
@@ -226,17 +239,17 @@ work ymap emap =(ydocs ++ edocs)
         order = topo ymap       -- dependency order, items with least dependencies first
         oprod = [ [ YProd n rs | n ← group, rs ← Map.lookup n ymap ] | group ← order ]
         emap' = fold convertgroup emap oprod -- full EBNF
-        convertgroup emap yprods = {- withDump [
+        convertgroup emap yprods =  withDump [
                                         dump "eprods" eprods,
-                                        dump "names"  names,
-                                        dump "mape"   mape,
-                                        dump "mapo"   mapo,
-                                        dump "mapi"   mapi,
-                                        dump "mapO"   mapO,
-                                    ] -}
+                                        --dump "names"  names,
+                                        --dump "mape"   mape,
+                                        --dump "mapo"   mapo,
+                                        --dump "mapi"   mapi,
+                                        --dump "mapO"   mapO,
+                                    ] 
                                     mapO
             where
-                eprods = map convProd  yprods      -- optimized prods
+                eprods = map (unRecurse . convProd)  yprods      -- optimized prods
                 !names = map EDef.name eprods
                 mape   = fold (\m\p → Map.insert p.name p m) emap eprods     -- prods
                 mapo   = fold (\m n → Map.adjust optimize n m) mape names    -- optimized prods
