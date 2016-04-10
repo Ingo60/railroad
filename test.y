@@ -1,3 +1,5 @@
 %%
-self: foo | bar | baz self | buz '.' self ; 
+lambda : '\' apats lambda | '\' apats '->' expr;
+apat  : '!' pattern | '?' pattern | pattern  ;
+apats : apat | apat apats;
 %%

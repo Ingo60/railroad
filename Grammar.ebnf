@@ -12,7 +12,7 @@ localdefs ::= dplocaldef (';' dplocaldef)* ';'?
 dplocaldef ::= DOCUMENTATION* (DOCUMENTATION|plocaldef)
 plocaldef ::= (PRIVATE|PROTECTED|PUBLIC)? localdef
 localdef ::= annotation|'pure'? 'native' methodspec '::' sigexs|fundef
-appex ::= appex? unex
+appex ::= unex+
 lambdabody ::= lambda|'->' expr
 getfield ::= VARID (('<-'|'=') expr)?
 getfields ::= getfield (',' getfield)* ','?
@@ -24,7 +24,7 @@ exprSC ::= expr (',' expr)* ','?
 field ::= VARID ('=' expr)?
 fields ::= field (',' field)* ','?
 term ::= qvarid|literal|'_'|qconid ('{' fields? '}')?|'(' ((','+|'!'|'?'|'-')?|SOMEOP expr?|binex (SOMEOP|'-')|expr (',' exprSC|';' exprSS)?) ')'|'[' ((expr '|' lcquals)?|exprSC ('..' expr?)?) ']'
-primary ::= term|('do' '{' dodefs|qualifiers '{' (VARID ('?'|'='|'<-')|getfields)) '}'|primary '.' (VARID|SOMEOP|'!'|'?'|'{' (VARID ('?'|'='|'<-')|getfields) '}'|'[' expr ']')
+primary ::= (term|('do' '{' dodefs|qualifiers '{' (VARID ('?'|'='|'<-')|getfields)) '}') ('.' (VARID|SOMEOP|'!'|'?'|'{' (VARID ('?'|'='|'<-')|getfields) '}'|'[' expr ']'))*
 unex ::= ('!'|'?')* primary
 apats ::= (('!'|'?')* primary)+
 lambda ::= '\' (('!'|'?')* primary)+ lambdabody
@@ -34,15 +34,15 @@ gquals ::= gqual (',' gqual)* ','?
 guard ::= '|' gquals ('->'|'=') expr
 guards ::= ('|' gquals ('->'|'=') expr)+
 funhead ::= binex
-fundef ::= binex ('=' expr|('|' gquals ('->'|'=') expr)+)|fundef 'where' '{' letdefs? '}'
+fundef ::= binex ('=' expr|('|' gquals ('->'|'=') expr)+) ('where' '{' letdefs? '}')*
 letdef ::= annotation|fundef
 letdefs ::= (annotation|fundef) (';' (annotation|fundef))* ';'?
 calts ::= calt (';' calt)* ';'?
-topex ::= ('if' expr ';'? 'then' expr ';'? 'else'|'let' '{' letdefs '}' 'in') expr|'case' expr 'of' '{' calts '}'|'\' (('!'|'?')* primary)+ lambdabody|appex
+topex ::= ('if' expr ';'? 'then' expr ';'? 'else'|'let' '{' letdefs '}' 'in') expr|'case' expr 'of' '{' calts '}'|'\' (('!'|'?')* primary)+ lambdabody|(('!'|'?')* primary)+
 binex ::= (binex (SOMEOP|'-'))* '-'? topex
 expr ::= binex ('::' (forall|rho))?
 pattern ::= expr
-calt ::= expr (('->'|'=') expr|('|' gquals ('->'|'=') expr)+)|calt 'where' '{' letdefs? '}'
+calt ::= expr (('->'|'=') expr|('|' gquals ('->'|'=') expr)+) ('where' '{' letdefs? '}')*
 aeq ::= '->'|'='
 import ::= 'import' modulename1 (VARID? CONID)? importliste
 importliste ::= ((VARID '(' importspecs|'(' importspecs?) ')'|PUBLIC importliste)?
@@ -116,7 +116,7 @@ simplekind ::= SOMEOP|VARID|'(' kind ')'
 kind ::= simplekind ('->' simplekind)*
 literal ::= TRUE|FALSE|CHRCONST|STRCONST|INTCONST|BIGCONST|LONGCONST|FLTCONST|DBLCONST|REGEXP
 mbdot ::= '.'|SOMEOP
-moduleclause ::= PROTECTED? 'module' modulename1|moduleclause VARID+ '(' qvarids ')'
+moduleclause ::= PROTECTED? 'module' modulename1 (VARID+ '(' qvarids ')')*
 modulename ::= modulename1
 modulename1 ::= ((varidkw|CONID) '.')* CONID
 nativename ::= rawnativename
@@ -141,7 +141,7 @@ words ::= VARID+
 word ::= VARID
 GETS ::= '<-'
 THEN ::= 'then'
-CONID ::= (UppercaseLetter|'_') (Letter|Digit|'_'|"'")*
+CONID ::= UppercaseLetter (Letter|Digit|'_'|"'")*
 IF ::= 'if'
 LET ::= 'let'
 DCOLON ::= '::'

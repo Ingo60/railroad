@@ -17,7 +17,7 @@ import Data.Graph
 import de.contexo.data.EBNF as E
 
 import fregefx.JavaFxAll hiding(ListView)
-import fregefx.JavaFxUtils
+import fregefx.JavaFxUtils hiding(add)
 
 -- ---------------------------------------------------------------------------
 --      YACC data types
@@ -202,7 +202,7 @@ factorRight e = case e of
     >           | baz self
     >           | buz self
 -}
-unRecurse (Def self e) = case e of 
+unRecurseRight (Def self e) = case e of 
         Alt{elems} = (Def self . normalize . Alt . unright) elems
         Seq{}      = (Def self . normalize . Seq . unright) [e]
         _          = Def self e 
@@ -214,6 +214,28 @@ unRecurse (Def self e) = case e of
                                     ]]
             where (recs, nonrecs) = partition ((NonT self ==) . snd) (map suffix xs)
 
+{--
+    > self ::= foo                  self ::= (foo | bar) (baz | buz)*
+    >          | bar
+    >          | self baz
+    >          | self buz
+-}
+unRecurseLeft (Def self e) = case e of
+        Alt{elems} = (Def self . normalize . Alt . unleft) elems
+        Seq{elems} | (NonT this : rest) ← elems,
+                     self == this
+                   = (Def self . normalize . Qnt Some .  Seq) rest
+                   | otherwise = Def self e
+        other      = Def self e
+    where
+        unleft xs | null recs = xs
+                  | otherwise = [Seq [
+                                        Alt (map (\(e, es) -> Seq (e:es)) nonrecs),
+                                        Qnt q (Alt (map (Seq . snd) recs))
+                                     ]
+                                ]
+            where (recs, nonrecs) = partition ((NonT self ==) . fst) (map prefix xs)
+                  q = if null nonrecs then Some else Many
 
 isAtomic Term{name} = true
 isAtomic NonT{name} = true
@@ -251,7 +273,7 @@ work ymap emap =(ydocs ++ edocs)
                                     ] 
                                     mapO
             where
-                eprods = map (unRecurse . convProd)  yprods      -- optimized prods
+                eprods = map (unRecurseLeft . unRecurseRight . convProd)  yprods      -- optimized prods
                 !names = map EDef.name eprods
                 mape   = fold (\m\p → Map.insert p.name p m) emap eprods     -- prods
                 mapo   = fold (\m n → Map.adjust optimize n m) mape names    -- optimized prods
@@ -310,7 +332,18 @@ gui [yaccsrc, ebnfsrc] | yaccsrc ~ '\.y$', ebnfsrc !~ '\.y$' = do
         buildUI :: Stage -> IO ()
         buildUI stage = do
             stage.setTitle "Yacc-EBNF-SVG Railroad Generator"
-            layout ← BorderPane.new ()
+            mono    ← Font.font "monospaced" FontWeight.normal 14.0
+            -- 
+            yaccTab ← Tab.new "Yacc"
+            yaccTab.setClosable false
+            yaccText ← TextArea.new "%%\nYacc text here.\n%%"
+            yaccText.setFont mono
+            yaccTab.setContent yaccText
+            --
+            tabs    ← TabPane.new ()
+            tabs.getTabs >>= _.add  yaccTab
+            layout  ← BorderPane.new () 
+            layout.setCenter tabs
             scene ← Scene.new layout 800.0 500.0
             stage.setScene scene 
             stage.show
